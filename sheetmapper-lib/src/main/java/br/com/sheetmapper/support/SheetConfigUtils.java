@@ -8,10 +8,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SheetConfigUtils {
@@ -65,6 +68,7 @@ public class SheetConfigUtils {
         boolean isEmptyOrder = rawOrder.length == 0 || Arrays.stream(rawOrder).allMatch(StringUtil::isBlank);
 
         List<String> orders = isEmptyOrder ? getDeclaredFields(clazz) : Arrays.asList(rawOrder);
+        throwIfDuplicate(orders);
 
         return SheetConfigMetadata.builder()
             .order(orders)
@@ -77,7 +81,8 @@ public class SheetConfigUtils {
 
     private static List<String> getDeclaredFields(Class<?> clazz) {
         return Arrays.stream(clazz.getDeclaredFields())
-                .map(Field::getName)
+                .filter(f -> !Modifier.isStatic(f.getModifiers()))
+                .filter(f -> !Modifier.isTransient(f.getModifiers()))                .map(Field::getName)
                 .toList();
     }
     private static List<String> getHeadersFromConfigOrder(Class<?> clazz, List<String> orders) {
@@ -106,5 +111,16 @@ public class SheetConfigUtils {
             log.error("Class type (clazz) must not be null.");
             throw new IllegalArgumentException("Class type (clazz) must not be null.");
         }
+    }
+
+    private static void throwIfDuplicate(List<String> values) {
+        Set<String> valuesAsSet = new HashSet<>();
+
+        values.stream()
+            .filter(v -> !valuesAsSet.add(v))
+            .findAny()
+            .ifPresent(v -> {
+                throw new IllegalArgumentException(String.format("The property [%s] in 'order' %s must be unique.", v, SheetConfig.class.getSimpleName()));
+            });
     }
 }
